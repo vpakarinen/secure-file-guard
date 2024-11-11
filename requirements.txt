@@ -1,0 +1,9 @@
+python-fido2
+cryptography
+PyYubiKey
+watchdog
+Pillow
+pytest
+sphinx
+poetry
+pyotp
