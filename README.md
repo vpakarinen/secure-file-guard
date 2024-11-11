@@ -4,7 +4,7 @@ Python application for file encryption that provides secure storage with multipl
 
 ## Features
 
-- Multiple authentication methods (Password, Hardware Key, Image-based, TOTP)
+- Multiple authentication methods (Password, Image-based, TOTP)
 - Strong AES-256 encryption for file content
 - Comprehensive audit logging
 - Secure folder management
