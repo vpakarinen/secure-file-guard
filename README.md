@@ -1,14 +1,14 @@
 # Secure File Guard
 
-A robust Python-based file encryption application that provides secure storage with multiple authentication methods.
+Python application for file encryption that provides secure storage with multiple authentication methods.
 
 ## Features
 
 - Multiple authentication methods (Password, Hardware Key, Image-based, TOTP)
 - Strong AES-256 encryption for file content
 - Comprehensive audit logging
-- Real-time file monitoring
 - Secure folder management
+- Real-time file monitoring
 - User-friendly interface
 
 ## Requirements
