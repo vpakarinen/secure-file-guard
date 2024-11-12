@@ -193,8 +193,8 @@ class SecureFileGuard:
 def main():
     app = SecureFileGuard()
     
-    print("\nSecure File Guard")
-    print("-" * 50)
+    print("\nSecure File Guard v1.0.0")
+    print("-" * 30)
     
     # Check if vault exists
     vault_path = Path.home() / '.secure-file-guard' / 'secure_storage'
@@ -218,7 +218,7 @@ def main():
             
             if success:
                 break
-            elif "Vault is locked" in message:
+            elif "Vault is locked." in message:
                 sys.exit(1)
     else:
         print("\nNo vault found. Creating new vault...")

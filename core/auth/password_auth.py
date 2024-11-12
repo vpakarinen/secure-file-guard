@@ -11,9 +11,7 @@ class PasswordAuth:
         self.config = config
         
     def validate_password_strength(self, password: str) -> Tuple[bool, str]:
-        """
-        Validate password strength using criteria from config
-        """
+        """Validate password strength using criteria from config"""
         min_length = self.config.get('security.password', 'min_length', 12)
         require_upper = self.config.get('security.password', 'require_uppercase', True)
         require_lower = self.config.get('security.password', 'require_lowercase', True)
@@ -39,9 +37,7 @@ class PasswordAuth:
         return True, "Password meets strength requirements"
         
     def hash_password(self, password: str) -> Tuple[bytes, bytes]:
-        """
-        Hash password using strong algorithm with salt
-        """
+        """Hash password using strong algorithm with salt"""
         salt = os.urandom(32)
         key = hashlib.pbkdf2_hmac(
             'sha256',
@@ -53,9 +49,7 @@ class PasswordAuth:
         return key, salt
         
     def verify_password(self, password: str, stored_key: bytes, salt: bytes) -> bool:
-        """
-        Verify a password against stored hash
-        """
+        """Verify a password against stored hash"""
         key = hashlib.pbkdf2_hmac(
             'sha256',
             password.encode('utf-8'),
