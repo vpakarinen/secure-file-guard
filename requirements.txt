@@ -1,6 +1,5 @@
+pywin32; platform_system == "Windows"  # Only install on Windows
 cryptography
+PyYAML
 pytest
 sphinx
-poetry
-pyotp
-PyYAML
