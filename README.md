@@ -26,4 +26,22 @@ Python application that provides secure storage with strong encryption and brute
 
 ## Installation
 
-1. Clone the repository
+1. **Clone the Repository**
+
+   ```bash
+   git clone https://github.com/vpakarinen/secure-file-guard.git
+   cd secure-file-guard
+   ```
+
+2. **Create a Virtual Environment** (Optional but Recommended)
+
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   ```
+
+3. **Install Dependencies**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
