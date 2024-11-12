@@ -1,6 +1,6 @@
 # Secure File Guard
 
-Python application that provides secure storage with strong encryption and password protection.
+Python application that provides secure storage with strong encryption and brute-force protection.
 
 ## Features
 
