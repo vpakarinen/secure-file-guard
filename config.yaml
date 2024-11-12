@@ -1,32 +1,26 @@
-# Application Settings
 app:
-  name: "Secure File Guard"
-  version: "1.0.0"
-
-# Security Settings
+  name: Secure File Guard
+  version: 1.0.0
+logging:
+  file: secure_file_guard.log
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  level: INFO
 security:
+  encryption:
+    algorithm: AES-256
+    key_iterations: 100000
   password:
     min_length: 12
-    require_uppercase: true
     require_lowercase: true
     require_numbers: true
     require_special: true
-    special_chars: "!@#$%^&*(),.?\":{}|<>"
-  encryption:
-    algorithm: "AES-256"
-    key_iterations: 100000
-
-# Storage Settings
+    require_uppercase: true
+    special_chars: '!@#$%^&*(),.?":{}|<>'
 storage:
-  secure_folder: ".secure-file-guard"
-  container_name: "container.encrypted"
-  metadata_name: "metadata.json"
-  max_file_size: 1073741824  # 1GB in bytes
-  allowed_extensions: ["*"]  # "*" means all extensions
+  allowed_extensions:
+  - '*'
   compression: true
-
-# Logging Settings
-logging:
-  level: "INFO"
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  file: "secure_file_guard.log" 
+  container_name: container.encrypted
+  max_file_size: 1073741824
+  metadata_name: metadata.json
+  secure_folder: .secure-file-guard
