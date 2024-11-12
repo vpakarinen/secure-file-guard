@@ -18,7 +18,6 @@ Python application that provides secure storage with strong encryption and brute
 - Creates an encrypted vault secured by your password and a unique salt
 - Files are encrypted using AES-256 and stored in a secure container
 - Password verification and key derivation ensure vault security
-- Files can be safely added to or extracted from the vault
 - All operations maintain file integrity and metadata security
 - Files can be safely added to or extracted from the vault
 
