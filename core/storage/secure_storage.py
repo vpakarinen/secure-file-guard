@@ -23,6 +23,7 @@ class SecureStorage:
         self.container_file = self.secure_folder / self.config.get('storage', 'container_name', 'container.encrypted')
         self.verification_file = self.secure_folder / 'vault.key'
         self.salt_file = self.secure_folder / 'vault.salt'
+        self.lockout_file = self.secure_folder / 'lockout.json'
         
         # Generate encryption key from password
         self.salt = self._get_or_create_salt()
@@ -371,7 +372,7 @@ class SecureStorage:
                 container_data = f.read()
                 
             # Calculate container size change
-            expected_size_change = original_size + 8  # file size + size header
+            expected_size_change = original_size + 8
             original_container_size = os.path.getsize(self.container_file)
             
             if len(container_data) != original_container_size - expected_size_change:

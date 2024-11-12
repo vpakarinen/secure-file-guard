@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 import getpass
 import sys
+import json
 
 class SecureFileGuard:
     def __init__(self):
@@ -29,6 +30,46 @@ class SecureFileGuard:
         self.failed_attempts = 0
         self.last_attempt_time = None
         self.lockout_until = None
+        self.lockout_file = Path.home() / '.secure-file-guard' / 'secure_storage' / 'lockout.json'
+        self.load_lockout_state()
+
+    def load_lockout_state(self):
+        """Load lockout state from file"""
+        try:
+            if self.lockout_file.exists():
+                with open(self.lockout_file, 'r') as f:
+                    state = json.load(f)
+                    
+                if 'lockout_until' in state:
+                    lockout_time = datetime.fromisoformat(state['lockout_until'])
+                    if datetime.now() < lockout_time:
+                        self.lockout_until = lockout_time
+                        self.failed_attempts = state.get('failed_attempts', self.max_attempts)
+                    else:
+                        # Lockout period has expired
+                        self.reset_attempts()
+                        
+        except Exception as e:
+            self.logger.error(f"Error loading lockout state: {str(e)}")
+            self.reset_attempts()
+
+    def save_lockout_state(self):
+        """Save lockout state to file"""
+        try:
+            state = {
+                'failed_attempts': self.failed_attempts,
+                'lockout_until': self.lockout_until.isoformat() if self.lockout_until else None,
+                'last_attempt': self.last_attempt_time.isoformat() if self.last_attempt_time else None
+            }
+            
+            # Ensure directory exists
+            self.lockout_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(self.lockout_file, 'w') as f:
+                json.dump(state, f)
+                
+        except Exception as e:
+            self.logger.error(f"Error saving lockout state: {str(e)}")
 
     def is_locked_out(self) -> Tuple[bool, str]:
         """Check if the vault is currently locked out due to failed attempts"""
@@ -39,6 +80,7 @@ class SecureFileGuard:
             remaining = (self.lockout_until - datetime.now()).seconds
             return True, f"Vault is locked. Try again in {remaining} seconds"
             
+        # Reset lockout if time has passed
         self.reset_attempts()
         return False, ""
 
@@ -47,6 +89,13 @@ class SecureFileGuard:
         self.failed_attempts = 0
         self.last_attempt_time = None
         self.lockout_until = None
+        
+        # Remove lockout file if it exists
+        try:
+            if self.lockout_file.exists():
+                self.lockout_file.unlink()
+        except Exception as e:
+            self.logger.error(f"Error removing lockout file: {str(e)}")
 
     def record_failed_attempt(self):
         """Record a failed password attempt"""
@@ -63,6 +112,9 @@ class SecureFileGuard:
         if self.failed_attempts >= self.max_attempts:
             self.lockout_until = current_time + timedelta(seconds=self.lockout_duration)
             self.logger.warning(f"Vault locked due to {self.failed_attempts} failed attempts")
+            
+        # Save state after each failed attempt
+        self.save_lockout_state()
 
     def setup_new_vault(self, password: str) -> Tuple[bool, str]:
         """Set up a new secure vault with password"""
@@ -193,7 +245,7 @@ class SecureFileGuard:
 def main():
     app = SecureFileGuard()
     
-    print("\nSecure File Guard v1.0.0")
+    print("\nSecure File Guard")
     print("-" * 30)
     
     # Check if vault exists
