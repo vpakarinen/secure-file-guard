@@ -1,9 +1,8 @@
-import hashlib
-import os
-import logging
-import re
 from typing import Tuple
-from pathlib import Path
+import hashlib
+import logging
+import os
+import re
 
 class PasswordAuth:
     def __init__(self, config):
