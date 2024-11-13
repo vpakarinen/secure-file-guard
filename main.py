@@ -14,13 +14,20 @@ class SecureFileGuard:
         # Load configuration
         self.config = ConfigManager()
         
-        # Set up logging
+        # Set up logging with more detailed configuration
+        log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        log_file = 'secure_file_guard.log'
+        
         logging.basicConfig(
-            level=getattr(logging, self.config.get("logging", "level", "INFO")),
-            format=self.config.get("logging", "format", "%(asctime)s - %(levelname)s - %(message)s"),
-            filename=self.config.get("logging", "file", "secure_file_guard.log")
+            level=logging.INFO,
+            format=log_format,
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler()  # Also show logs in console
+            ]
         )
         self.logger = logging.getLogger(__name__)
+        self.logger.info("Secure File Guard started")
         
         self.password_auth = PasswordAuth(self.config)
         self.storage: Optional[SecureStorage] = None
@@ -138,31 +145,34 @@ class SecureFileGuard:
     def unlock_vault(self, password: str) -> Tuple[bool, str]:
         """Unlock existing vault with password"""
         try:
+            # Check for lockout
             locked, message = self.is_locked_out()
             if locked:
+                self.logger.warning(f"Vault access attempted while locked: {message}")
                 return False, message
 
-            # Check if vault exists
             vault_path = Path.home() / '.secure-file-guard' / 'secure_storage'
             if not vault_path.exists():
+                self.logger.error("Vault not found at expected location")
                 return False, "No vault found"
 
-            # Initialize storage with password
+            self.logger.info("Attempting to unlock vault")
             self.storage = SecureStorage(password, self.config)
             
-            # Verify password
             if not self.storage.verify_password():
                 self.record_failed_attempt()
                 attempts_left = self.max_attempts - self.failed_attempts
+                self.logger.warning(f"Failed login attempt. {attempts_left} attempts remaining")
                 if attempts_left > 0:
                     return False, f"Invalid password. {attempts_left} attempts remaining"
                 return False, "Too many failed attempts. Vault is locked"
                 
+            self.logger.info("Vault unlocked successfully")
             self.reset_attempts()
             return True, "Vault unlocked successfully"
             
         except Exception as e:
-            self.logger.error(f"Error unlocking vault: {str(e)}")
+            self.logger.error(f"Error unlocking vault: {str(e)}", exc_info=True)
             return False, f"Failed to unlock vault: {str(e)}"
             
     def add_file(self, file_path: Path) -> Tuple[bool, str]:

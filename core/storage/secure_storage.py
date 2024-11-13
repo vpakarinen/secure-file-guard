@@ -83,7 +83,6 @@ class SecureStorage:
                 f.write(self.salt)
             os.chmod(self.salt_file, 0o600)
             
-            # Create verification file with restricted permissions
             encrypted_check = self.fernet.encrypt(b"VALID_VAULT_KEY")
             with open(self.verification_file, 'wb') as f:
                 f.write(encrypted_check)
@@ -110,84 +109,79 @@ class SecureStorage:
         """Add a file to secure storage"""
         try:
             if not file_path.exists():
+                self.logger.error(f"File not found: {file_path}")
                 return False, "File does not exist"
+
+            self.logger.info(f"Adding file: {file_path}")
+            file_size = file_path.stat().st_size
+            self.logger.debug(f"File size: {file_size} bytes")
 
             with open(file_path, 'rb') as f:
                 content = f.read()
+                self.logger.debug(f"Read {len(content)} bytes from file")
 
+            # Update metadata
+            metadata = self._load_metadata()
             file_info = {
                 'original_path': str(file_path),
                 'size': len(content),
                 'added_at': datetime.now().isoformat(),
                 'modified_at': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
             }
-
-            # Update metadata first
-            metadata = self._load_metadata()
             metadata['files'][file_path.name] = file_info
             self._save_metadata(metadata)
+            self.logger.debug("Updated metadata")
 
-            # Encrypt and save the content
+            # Encrypt and save content
             encrypted_content = self.fernet.encrypt(content)
             self._append_to_container(encrypted_content)
+            self.logger.info(f"Successfully added file: {file_path.name}")
 
             return True, "File added successfully"
 
         except Exception as e:
-            self.logger.error(f"Error adding file: {str(e)}")
-            return False
+            self.logger.error(f"Error adding file: {str(e)}", exc_info=True)
+            return False, f"Failed to add file: {str(e)}"
             
     def extract_file(self, filename: str, destination: Path) -> Tuple[bool, str]:
         """Extract a file from the vault"""
         try:
-            # Check if file exists in metadata
+            self.logger.info(f"Attempting to extract file: {filename}")
+            
             metadata = self._load_metadata()
             if filename not in metadata['files']:
+                self.logger.warning(f"File not found in vault: {filename}")
                 return False, f"File '{filename}' not found in vault"
 
-            # Get encrypted content
-            encrypted_content = self._get_file_content(filename)
-            if not encrypted_content:
-                return False, f"Could not retrieve content for '{filename}'"
-
-            destination = Path(destination)
-
-            if destination.is_dir():
-                destination = destination / filename
-
             try:
+                encrypted_content = self._get_file_content(filename)
+                if not encrypted_content:
+                    self.logger.error(f"Could not retrieve content for: {filename}")
+                    return False, f"Could not retrieve content for '{filename}'"
+
+                destination = Path(destination)
+                if destination.is_dir():
+                    destination = destination / filename
+                
+                self.logger.debug(f"Extracting to: {destination}")
+                
+                # Decrypt and save
+                decrypted_content = self.fernet.decrypt(encrypted_content)
                 destination.parent.mkdir(parents=True, exist_ok=True)
-
-                # Decrypt the content
-                try:
-                    decrypted_content = self.fernet.decrypt(encrypted_content)
-                except Exception as e:
-                    self.logger.error(f"Decryption failed: {str(e)}")
-                    return False
-
-                try:
-                    with open(destination, 'wb') as f:
-                        f.write(decrypted_content)
-                except Exception as e:
-                    self.logger.error(f"Failed to write file: {str(e)}")
-                    return False
-
-                # Verify the extracted file
-                if not destination.exists():
-                    return False, "File was not created"
-
-                if destination.stat().st_size != len(decrypted_content):
-                    return False, "Extracted file size mismatch"
-
+                
+                with open(destination, 'wb') as f:
+                    f.write(decrypted_content)
+                
+                self.logger.info(f"Successfully extracted file: {filename}")
                 return True, f"File extracted successfully to: {destination}"
 
             except Exception as e:
-                self.logger.error(f"Error during extraction: {str(e)}")
-                return False
+                self.logger.error(f"Error extracting file: {str(e)}", exc_info=True)
+                return False, f"Failed to extract file: {str(e)}"
 
         except Exception as e:
-            self.logger.error(f"Error accessing vault: {str(e)}")
-            return False
+            self.logger.error(f"Error accessing vault: {str(e)}", exc_info=True)
+            return False, f"Failed to access vault: {str(e)}"
             
     def _save_metadata(self, metadata: Dict):
         """Save metadata to file"""
@@ -322,42 +316,37 @@ class SecureStorage:
             raise RuntimeError(f"Could not secure {path}: {str(e)}")
 
     def secure_delete_file(self, filename: str) -> Tuple[bool, str]:
-        """Delete a file using DoD 5220.22-M standard (3 passes)"""
+        """Delete a file using secure deletion"""
         try:
-            # Check if file exists in vault
+            self.logger.info(f"Attempting to securely delete file: {filename}")
+            
             metadata = self._load_metadata()
             if filename not in metadata['files']:
+                self.logger.warning(f"File not found for deletion: {filename}")
                 return False, f"File '{filename}' not found in vault"
 
-            # Remove from metadata first
-            original_size = metadata['files'][filename]['size']
-            del metadata['files'][filename]
-            self._save_metadata(metadata)
-            
-            status_messages = [
-                f"Starting deletion of '{filename}' ({original_size} bytes)",
-                "✓ Removed from metadata"
-            ]
-            
             try:
-                # Reorganize container to remove the file's space
+                original_size = metadata['files'][filename]['size']
+                self.logger.debug(f"Original file size: {original_size} bytes")
+
+                # Remove from metadata
+                del metadata['files'][filename]
+                self._save_metadata(metadata)
+                self.logger.debug("Updated metadata")
+
+                # Reorganize container
                 self._reorganize_container(filename)
-                status_messages.append("✓ Removed from container")
-                
-                # Verify deletion
-                if self._verify_deletion(filename, original_size)[0]:
-                    status_messages.append("✓ Verified file deletion")
-                
-                return True, "\n".join(status_messages)
-                
+                self.logger.info(f"Successfully deleted file: {filename}")
+
+                return True, f"File '{filename}' has been securely deleted"
+
             except Exception as e:
-                self.logger.error(f"Error during container cleanup: {str(e)}")
-                status_messages.append(f"! Note: File was removed but container cleanup failed")
-                return True, "\n".join(status_messages)
-                
+                self.logger.error(f"Error during secure deletion: {str(e)}", exc_info=True)
+                return False, f"Error during secure deletion: {str(e)}"
+
         except Exception as e:
-            self.logger.error(f"Error during file deletion: {str(e)}")
-            return False
+            self.logger.error(f"Error accessing vault for deletion: {str(e)}", exc_info=True)
+            return False, f"Error accessing vault: {str(e)}"
 
     def _verify_deletion(self, filename: str, original_size: int) -> Tuple[bool, str]:
         """Verify that a file has been properly deleted from the vault"""
