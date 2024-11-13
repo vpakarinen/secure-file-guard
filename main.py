@@ -1,6 +1,7 @@
 from core.storage.secure_storage import SecureStorage
 from core.config.config_manager import ConfigManager
 from core.auth.password_auth import PasswordAuth
+from core.auth.image_auth import ImageAuth
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from pathlib import Path
@@ -30,6 +31,7 @@ class SecureFileGuard:
         self.logger.info("Secure File Guard started")
         
         self.password_auth = PasswordAuth(self.config)
+        self.image_auth = ImageAuth(self.config)
         self.storage: Optional[SecureStorage] = None
         
         self.max_attempts = 3
@@ -39,6 +41,7 @@ class SecureFileGuard:
         self.lockout_until = None
         self.lockout_file = Path.home() / '.secure-file-guard' / 'secure_storage' / 'lockout.json'
         self.load_lockout_state()
+        self.using_image_auth = False
 
     def load_lockout_state(self):
         """Load lockout state from file"""
@@ -123,34 +126,53 @@ class SecureFileGuard:
         # Save state after each failed attempt
         self.save_lockout_state()
 
-    def setup_new_vault(self, password: str) -> Tuple[bool, str]:
-        """Set up a new secure vault with password"""
+    def setup_new_vault(self, password: str, image_path: Optional[Path] = None) -> Tuple[bool, str]:
+        """Set up a new vault with optional image authentication"""
         try:
-            # Validate password strength
             valid, message = self.password_auth.validate_password_strength(password)
             if not valid:
                 return False, message
                 
+            # Setup image authentication if provided
+            if image_path:
+                self.logger.info("Setting up image authentication")
+                success, message = self.image_auth.register_image(image_path)
+                if not success:
+                    self.logger.error(f"Image authentication setup failed: {message}")
+                    return False, message
+                self.logger.info("Image authentication setup successful")
+            
+            # Initialize storage
             self.storage = SecureStorage(password, self.config)
             success, message = self.storage.initialize_storage(force_new=True)
             
             if success:
-                return True, "Secure vault created successfully"
+                status = "with" if image_path else "without"
+                return True, f"Secure vault created successfully ({status} image authentication)"
             return False, message
             
         except Exception as e:
             self.logger.error(f"Error setting up vault: {str(e)}")
             return False, f"Failed to set up vault: {str(e)}"
             
-    def unlock_vault(self, password: str) -> Tuple[bool, str]:
-        """Unlock existing vault with password"""
+    def unlock_vault(self, password: str, image_path: Optional[Path] = None) -> Tuple[bool, str]:
+        """Unlock vault with password and optional image authentication"""
         try:
-            # Check for lockout
             locked, message = self.is_locked_out()
             if locked:
-                self.logger.warning(f"Vault access attempted while locked: {message}")
                 return False, message
-
+                
+            # Check if image auth is required
+            if self.image_auth.image_hash_file.exists():
+                if not image_path:
+                    return False, "Image authentication is required"
+                    
+                success, message = self.image_auth.verify_image(image_path)
+                if not success:
+                    self.record_failed_attempt()
+                    return False, "Image authentication failed"
+                    
+            # Verify password
             vault_path = Path.home() / '.secure-file-guard' / 'secure_storage'
             if not vault_path.exists():
                 self.logger.error("Vault not found at expected location")
@@ -188,7 +210,6 @@ class SecureFileGuard:
             return False, "Vault is not unlocked"
             
         try:
-            # Create destination directory if it doesn't exist
             destination = Path(destination)
             if destination.is_dir():
                 destination = destination / filename
@@ -256,7 +277,7 @@ def main():
     app = SecureFileGuard()
     
     print("\nSecure File Guard")
-    print("-" * 30)
+    print("-" * 50)
     
     # Check if vault exists
     vault_path = Path.home() / '.secure-file-guard' / 'secure_storage'
@@ -266,6 +287,7 @@ def main():
     if vault_exists:
         # Try to unlock existing vault
         while True:
+            # Check for lockout
             locked, message = app.is_locked_out()
             if locked:
                 print(f"\n{message}")
@@ -274,13 +296,23 @@ def main():
             password = app.prompt_password()
             if password is None:
                 sys.exit(1)
+            
+            # Check if image auth is enabled
+            if app.image_auth.image_hash_file.exists():
+                image_path = input("\nEnter path to authentication image: ")
+                if not image_path:
+                    print("Image authentication is required")
+                    continue
+                image_path = Path(image_path)
+            else:
+                image_path = None
                 
-            success, message = app.unlock_vault(password)
+            success, message = app.unlock_vault(password, image_path)
             print(f"\n{message}")
             
             if success:
                 break
-            elif "Vault is locked." in message:
+            elif "Vault is locked" in message:
                 sys.exit(1)
     else:
         print("\nNo vault found. Creating new vault...")
@@ -289,12 +321,26 @@ def main():
             if password is None:
                 sys.exit(1)
                 
-            success, message = app.setup_new_vault(password)
+            # Ask if user wants to use image authentication
+            use_image = input("\nWould you like to use image authentication? (y/n): ").lower() == 'y'
+            image_path = None
+            
+            if use_image:
+                image_path = input("Enter path to authentication image: ")
+                if not image_path:
+                    print("No image provided. Continuing without image authentication.")
+                else:
+                    image_path = Path(image_path)
+                    if not image_path.exists():
+                        print("Image file not found. Continuing without image authentication.")
+                        image_path = None
+            
+            success, message = app.setup_new_vault(password, image_path)
             if success:
                 break
             print(f"\n{message}")
-    
-    # Main application loop
+
+    # Main application loop after successful authentication
     while True:
         print("\nAvailable commands:")
         print("1. Add file")
@@ -317,15 +363,13 @@ def main():
             filename = input("Enter filename to extract: ")
             destination = input("Enter destination path: ")
             try:
-                success, message = app.storage.extract_file(filename, Path(destination))
+                success, message = app.extract_file(filename, Path(destination))
                 if success:
-                    print(f"\nExtraction successful!")
-                    print(f"File extracted to: {message}")
+                    print(f"File extracted successfully to: {destination}")
                 else:
-                    print(f"\nExtraction failed!")
-                    print(f"Reason: {message}")
+                    print(f"Extract file status: {message}")
             except Exception as e:
-                print(f"Error during extraction: {str(e)}")
+                print(f"Error: {str(e)}")
                 
         elif choice == "3":
             print("\nFiles in vault:")
@@ -343,13 +387,9 @@ def main():
                     print("-" * 50)
                     print(message)
                     print("-" * 50)
-                    if success:
-                        print("\nFile has been securely deleted.")
-                    else:
-                        print("\nDeletion failed!")
                 except Exception as e:
                     print(f"Error: {str(e)}")
-                
+                    
         elif choice == "5":
             print("Exiting...")
             break
