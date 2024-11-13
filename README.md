@@ -2,8 +2,6 @@
 
 Python application that provides secure storage with strong encryption and brute-force protection.
 
-✅ Fully tested to make sure it's secure
-
 ## Features
 
 - AES-256 encryption with PBKDF2 key derivation for maximum security
